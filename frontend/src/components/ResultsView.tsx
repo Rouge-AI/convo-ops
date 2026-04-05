@@ -58,6 +58,7 @@ export default function ResultsView({ run, allActions, rejectedActions, transcri
   const notProcessedByType = useMemo(() => {
     const buckets: Record<string, PlannedAction[]> = {
       term_sheet: [],
+      meeting: [],
       email: [],
       github_issue: [],
       slack: [],
@@ -82,6 +83,7 @@ export default function ResultsView({ run, allActions, rejectedActions, transcri
   const actionTypeLabel = (agent: PlannedAction["agent"]) => {
     if (agent === "github_issue") return "GitHub Issue";
     if (agent === "email") return "Follow-up Email";
+    if (agent === "meeting") return "Meeting";
     if (agent === "term_sheet") return "Term Sheet";
     if (agent === "slack") return "Slack Message";
     return "Action";
@@ -217,6 +219,7 @@ export default function ResultsView({ run, allActions, rejectedActions, transcri
                 )}
                 {[
                   ["term_sheet", "Term Sheets"],
+                  ["meeting", "Meetings"],
                   ["email", "Follow-up Emails"],
                   ["github_issue", "GitHub Issues"],
                   ["slack", "Slack Messages"],

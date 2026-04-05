@@ -16,7 +16,7 @@ export interface PlannedAction {
   id: string;
   title: string;
   description: string;
-  agent: "github_issue" | "email" | "term_sheet" | "slack";
+  agent: "github_issue" | "email" | "meeting" | "term_sheet" | "slack";
   priority: "high" | "medium" | "low";
   data: Record<string, unknown>;
 }

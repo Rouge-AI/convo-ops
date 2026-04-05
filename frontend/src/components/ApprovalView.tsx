@@ -24,6 +24,11 @@ interface ActionFormState {
   assignees: string;
   to: string;
   cc: string;
+  attendees: string;
+  startTime: string;
+  endTime: string;
+  timezone: string;
+  location: string;
   folderId: string;
   shareWith: string;
 }
@@ -32,6 +37,11 @@ function initFormState(action: PlannedAction): ActionFormState {
   const data = action.data as Record<string, unknown>;
   const to = (data.to as string) ?? "";
   const cc = (data.cc as string) ?? "";
+  const attendees = ((data.attendees as string[]) ?? []).join(", ");
+  const startTime = (data.start_time as string) ?? "";
+  const endTime = (data.end_time as string) ?? "";
+  const timezone = (data.timezone as string) ?? "UTC";
+  const location = (data.location as string) ?? "";
   const folderId = (data.folder_id as string) ?? "";
   const shareWith = ((data.share_with as string[]) ?? []).join(", ");
   return {
@@ -50,6 +60,11 @@ function initFormState(action: PlannedAction): ActionFormState {
     assignees: ((data.assignees as string[]) ?? []).join(", "),
     to,
     cc,
+    attendees,
+    startTime,
+    endTime,
+    timezone,
+    location,
     folderId,
     shareWith,
   };
@@ -72,6 +87,7 @@ export default function ApprovalView({
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
     github_issue: true,
     email: true,
+    meeting: true,
     term_sheet: true,
     slack: true,
   });
@@ -93,7 +109,7 @@ export default function ApprovalView({
   }, [actions]);
 
   const orderedAgentEntries = useMemo(() => {
-    const preferredOrder = ["github_issue", "email", "term_sheet", "slack"];
+    const preferredOrder = ["github_issue", "email", "meeting", "term_sheet", "slack"];
     const present = new Set(Object.keys(actionsByAgent));
     const ordered = preferredOrder.filter((agent) => present.has(agent));
     const remaining = Object.keys(actionsByAgent).filter((agent) => !preferredOrder.includes(agent));
@@ -165,6 +181,23 @@ export default function ApprovalView({
           };
         }
 
+        if (a.agent === "meeting") {
+          return {
+            ...a,
+            title: f.title.trim(),
+            description: f.description.trim(),
+            data: {
+              title: f.title.trim(),
+              description: f.description.trim(),
+              attendees: f.attendees.split(",").map((s) => s.trim()).filter(Boolean),
+              start_time: f.startTime.trim(),
+              end_time: f.endTime.trim(),
+              timezone: f.timezone.trim() || "UTC",
+              location: f.location.trim(),
+            },
+          };
+        }
+
         if (a.agent !== "github_issue") {
           return {
             ...a,
@@ -208,13 +241,33 @@ export default function ApprovalView({
       return;
     }
 
+    const invalidMeetingData = approvedActions.find((a) => {
+      if (a.agent !== "meeting") return false;
+      const payload = a.data as Record<string, unknown>;
+      const start = String(payload.start_time ?? "").trim();
+      const end = String(payload.end_time ?? "").trim();
+      const attendees = (payload.attendees as string[] | undefined) ?? [];
+      return !start || !end || attendees.length === 0;
+    });
+    if (invalidMeetingData) {
+      setError("Meeting action requires attendees, start time, and end time.");
+      setLoading(false);
+      setCreatingActionId(null);
+      return;
+    }
+
     const rejectedActions = actions.filter((a) => snapshot[a.id].decision === "reject");
 
     try {
       const run = await approveRun(runId, approvedActions);
       if (triggeredActionId) {
         const action = actions.find((item) => item.id === triggeredActionId);
-        const successText = action?.agent === "email" ? "Sent successfully." : "Created successfully.";
+        const successText =
+          action?.agent === "email"
+            ? "Sent successfully."
+            : action?.agent === "meeting"
+            ? "Scheduled successfully."
+            : "Created successfully.";
         setSuccessByAction((prev) => ({
           ...prev,
           [triggeredActionId]: successText,
@@ -257,6 +310,7 @@ export default function ApprovalView({
       nextDecision === "create" &&
       (selectedAction?.agent === "email" ||
         selectedAction?.agent === "github_issue" ||
+        selectedAction?.agent === "meeting" ||
         selectedAction?.agent === "term_sheet");
 
     if (shouldExecuteNow) {
@@ -267,6 +321,7 @@ export default function ApprovalView({
   const agentLabel = (agent: string) => {
     if (agent === "github_issue") return "GitHub Issues";
     if (agent === "email") return "Follow-up Emails";
+    if (agent === "meeting") return "Scheduled Meetings";
     if (agent === "term_sheet") return "Term Sheets";
     if (agent === "slack") return "Slack Messages";
     return `${agent} Actions`;
@@ -275,6 +330,7 @@ export default function ApprovalView({
   const agentIcon = (agent: string) => {
     if (agent === "github_issue") return "GH";
     if (agent === "email") return "EM";
+    if (agent === "meeting") return "MT";
     if (agent === "term_sheet") return "TS";
     if (agent === "slack") return "SL";
     return "AC";
@@ -345,13 +401,14 @@ export default function ApprovalView({
                     const f = forms[action.id];
                     const isGithub = action.agent === "github_issue";
                     const isEmail = action.agent === "email";
+                    const isMeeting = action.agent === "meeting";
                     const isTermSheet = action.agent === "term_sheet";
-                    const isActionExecution = isGithub || isEmail || isTermSheet;
+                    const isActionExecution = isGithub || isEmail || isMeeting || isTermSheet;
                     const isCreate = f.decision === "create";
                     const isReject = f.decision === "reject";
-                    const createLabel = isEmail ? "Send" : "Create";
-                    const rejectLabel = isEmail ? "Discard" : "Reject";
-                    const loadingCreateLabel = isEmail ? "Sending..." : "Creating...";
+                    const createLabel = isEmail ? "Send" : isMeeting ? "Schedule" : "Create";
+                    const rejectLabel = isEmail ? "Discard" : isMeeting ? "Skip" : "Reject";
+                    const loadingCreateLabel = isEmail ? "Sending..." : isMeeting ? "Scheduling..." : "Creating...";
                     const termSheetMode = termSheetViewMode[action.id] ?? "write";
                     const isCreatingThisAction = loading && creatingActionId === action.id;
 
@@ -510,6 +567,60 @@ export default function ApprovalView({
                                   value={f.cc}
                                   onChange={(e) => update(action.id, { cc: e.target.value })}
                                   placeholder="investor@example.com"
+                                  className="w-full rounded-lg border border-[#344062] bg-[#0b1323] px-3 py-2.5 text-sm text-[#e8eaf0] placeholder:text-[#6f7a9f] focus:outline-none focus:border-[#6c63ff]"
+                                />
+                              </Field>
+                            </div>
+                          )}
+
+                          {isMeeting && (
+                            <div className="space-y-2.5">
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                                <Field label="Attendees (comma-separated)">
+                                  <input
+                                    type="text"
+                                    value={f.attendees}
+                                    onChange={(e) => update(action.id, { attendees: e.target.value })}
+                                    placeholder="founder@example.com, investor@example.com"
+                                    className="w-full rounded-lg border border-[#344062] bg-[#0b1323] px-3 py-2.5 text-sm text-[#e8eaf0] placeholder:text-[#6f7a9f] focus:outline-none focus:border-[#6c63ff]"
+                                  />
+                                </Field>
+                                <Field label="Timezone">
+                                  <input
+                                    type="text"
+                                    value={f.timezone}
+                                    onChange={(e) => update(action.id, { timezone: e.target.value })}
+                                    placeholder="America/Los_Angeles"
+                                    className="w-full rounded-lg border border-[#344062] bg-[#0b1323] px-3 py-2.5 text-sm text-[#e8eaf0] placeholder:text-[#6f7a9f] focus:outline-none focus:border-[#6c63ff]"
+                                  />
+                                </Field>
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                                <Field label="Start Time (ISO-8601)">
+                                  <input
+                                    type="text"
+                                    value={f.startTime}
+                                    onChange={(e) => update(action.id, { startTime: e.target.value })}
+                                    placeholder="2026-04-09T10:00:00-07:00"
+                                    className="w-full rounded-lg border border-[#344062] bg-[#0b1323] px-3 py-2.5 text-sm text-[#e8eaf0] placeholder:text-[#6f7a9f] focus:outline-none focus:border-[#6c63ff]"
+                                  />
+                                </Field>
+                                <Field label="End Time (ISO-8601)">
+                                  <input
+                                    type="text"
+                                    value={f.endTime}
+                                    onChange={(e) => update(action.id, { endTime: e.target.value })}
+                                    placeholder="2026-04-09T10:30:00-07:00"
+                                    className="w-full rounded-lg border border-[#344062] bg-[#0b1323] px-3 py-2.5 text-sm text-[#e8eaf0] placeholder:text-[#6f7a9f] focus:outline-none focus:border-[#6c63ff]"
+                                  />
+                                </Field>
+                              </div>
+                              <Field label="Location (optional)">
+                                <input
+                                  type="text"
+                                  value={f.location}
+                                  onChange={(e) => update(action.id, { location: e.target.value })}
+                                  placeholder="Google Meet"
                                   className="w-full rounded-lg border border-[#344062] bg-[#0b1323] px-3 py-2.5 text-sm text-[#e8eaf0] placeholder:text-[#6f7a9f] focus:outline-none focus:border-[#6c63ff]"
                                 />
                               </Field>

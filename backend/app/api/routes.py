@@ -13,6 +13,7 @@ from langgraph.types import Command
 from pydantic import BaseModel
 
 from app.graph.builder import get_graph
+from app.graph.nodes.calendar_agent import calendar_agent_node
 from app.graph.nodes.gdrive_agent import gdrive_agent_node
 from app.graph.nodes.github_agent import github_agent_node
 from app.graph.nodes.gmail_agent import gmail_agent_node
@@ -59,7 +60,7 @@ async def _execute_incremental_actions(
     merged_results = list(existing_state.get("execution_results", []))
     merged_audit = list(existing_state.get("audit_trail", []))
 
-    for node in (github_agent_node, gmail_agent_node, gdrive_agent_node):
+    for node in (github_agent_node, gmail_agent_node, calendar_agent_node, gdrive_agent_node):
         node_output = await node(state_for_agents)
         node_results = node_output.get("execution_results", [])
         node_audit = node_output.get("audit_trail", [])
@@ -71,7 +72,7 @@ async def _execute_incremental_actions(
         state_for_agents["execution_results"] = merged_results
         state_for_agents["audit_trail"] = merged_audit
 
-    supported_agents = {"github_issue", "email", "term_sheet"}
+    supported_agents = {"github_issue", "email", "meeting", "term_sheet"}
     unsupported = [a for a in approved_actions if a.get("agent") not in supported_agents]
     if unsupported:
         now = datetime.now(timezone.utc).isoformat()

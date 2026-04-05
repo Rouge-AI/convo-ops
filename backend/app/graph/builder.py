@@ -5,6 +5,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
 from app.graph.nodes.classifier import classifier_node
+from app.graph.nodes.calendar_agent import calendar_agent_node
 from app.graph.nodes.extractor import extractor_node
 from app.graph.nodes.github_agent import github_agent_node
 from app.graph.nodes.gmail_agent import gmail_agent_node
@@ -31,6 +32,7 @@ def build_graph():
     builder.add_node("supervisor", supervisor_node)
     builder.add_node("github_agent", github_agent_node)
     builder.add_node("gmail_agent", gmail_agent_node)
+    builder.add_node("calendar_agent", calendar_agent_node)
     builder.add_node("gdrive_agent", gdrive_agent_node)
 
     # ── Edges ──────────────────────────────────────────────────────────────────
@@ -49,7 +51,8 @@ def build_graph():
     # HITL → execution → done
     builder.add_edge("supervisor", "github_agent")
     builder.add_edge("github_agent", "gmail_agent")
-    builder.add_edge("gmail_agent", "gdrive_agent")
+    builder.add_edge("gmail_agent", "calendar_agent")
+    builder.add_edge("calendar_agent", "gdrive_agent")
     builder.add_edge("gdrive_agent", END)
 
     # ── Compile with in-memory checkpointer (enables HITL interrupt/resume) ───
