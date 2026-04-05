@@ -15,7 +15,8 @@ USER_PROMPT = """Create a prioritised action plan from this meeting.
 
 Available agents:
   - github_issue  → creates a GitHub issue; data must include: title (str), body (str), labels (list[str]), assignees (list[str])
-  - email         → drafts a follow-up email (stub for now)
+    - email         → sends follow-up email via Gmail MCP; data must include: to (str), cc (str, optional), subject (str), body (str)
+    - term_sheet    → creates term sheet document via Google Drive MCP; data must include: document_title (str), content (str), folder_id (str, optional), share_with (list[str], optional)
   - slack         → sends a Slack message (stub for now)
 
 Conversation type: {conversation_type}
@@ -28,17 +29,21 @@ Transcript (for additional context):
 {transcript}
 
 Rules:
-1. Every action_item with a clear owner should become a github_issue for a {conversation_type} meeting.
-2. Each blocker should also become a github_issue labelled "blocker".
-3. Rank by priority: high → medium → low.
-4. Keep titles concise (≤ 72 chars)."""
+1. If execution_profile is "ticket_and_notify", convert owned action_items and blockers to github_issue actions.
+2. If execution_profile is "doc_and_email", include at least:
+    - one email action that sends a VC follow-up summary and next steps
+    - one term_sheet action that creates a draft term sheet document
+3. For email actions, use title as subject and description as the main body summary.
+4. For term_sheet actions, use title as document title and description as draft content summary.
+5. Rank by priority: high → medium → low.
+6. Keep titles concise (≤ 72 chars)."""
 
 
 class PlannedAction(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
     title: str
     description: str
-    agent: str          # github_issue | email | slack
+    agent: str          # github_issue | email | term_sheet | slack
     priority: str       # high | medium | low
     data: dict = Field(default_factory=dict)  # agent-specific payload
 

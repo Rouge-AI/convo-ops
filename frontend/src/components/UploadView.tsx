@@ -2,8 +2,13 @@ import { useRef, useState } from "react";
 import { startRun } from "../api";
 import type { Run } from "../types";
 
+interface TranscriptFile {
+  name: string;
+  size: number;
+}
+
 interface Props {
-  onRunStarted: (run: Run) => void;
+  onRunStarted: (run: Run, transcriptFile: TranscriptFile) => void;
 }
 
 export default function UploadView({ onRunStarted }: Props) {
@@ -24,7 +29,7 @@ export default function UploadView({ onRunStarted }: Props) {
     setError(null);
     try {
       const run = await startRun(file);
-      onRunStarted(run);
+      onRunStarted(run, { name: file.name, size: file.size });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Unknown error — check the backend.");
     } finally {
