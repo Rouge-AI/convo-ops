@@ -40,7 +40,7 @@ class PlannedAction(BaseModel):
     description: str
     agent: str          # github_issue | email | slack
     priority: str       # high | medium | low
-    data: dict          # agent-specific payload
+    data: dict = Field(default_factory=dict)  # agent-specific payload
 
 
 class ActionPlan(BaseModel):
@@ -49,7 +49,7 @@ class ActionPlan(BaseModel):
 
 def planner_node(state: ConvoOpsState) -> dict:
     llm = get_fast_llm()
-    result: ActionPlan = llm.with_structured_output(ActionPlan).invoke(
+    result: ActionPlan = llm.with_structured_output(ActionPlan, method="function_calling").invoke(
         [
             {"role": "system", "content": SYSTEM_PROMPT},
             {

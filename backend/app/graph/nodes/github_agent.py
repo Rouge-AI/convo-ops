@@ -15,28 +15,11 @@ from app.graph.state import ConvoOpsState
 
 def _mcp_config() -> dict:
     token = os.environ["GITHUB_TOKEN"]
-    transport = os.environ.get("GITHUB_MCP_TRANSPORT", "docker").lower()
-
-    if transport == "npx":
-        # Alternative: community server via npx (no Docker required)
-        return {
-            "github": {
-                "command": "npx",
-                "args": ["-y", "@modelcontextprotocol/server-github"],
-                "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": token},
-                "transport": "stdio",
-            }
-        }
-
-    # Default: official GitHub MCP server via Docker
+    # npx-only transport (Docker removed)
     return {
         "github": {
-            "command": "docker",
-            "args": [
-                "run", "-i", "--rm",
-                "-e", "GITHUB_PERSONAL_ACCESS_TOKEN",
-                "ghcr.io/github/github-mcp-server",
-            ],
+            "command": "npx",
+            "args": ["-y", "@modelcontextprotocol/server-github"],
             "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": token},
             "transport": "stdio",
         }
@@ -83,8 +66,9 @@ async def github_agent_node(state: ConvoOpsState) -> dict:
 
     results: list[dict] = []
 
-    async with MultiServerMCPClient(_mcp_config()) as client:
-        tools = client.get_tools()
+    try:
+        client = MultiServerMCPClient(_mcp_config())
+        tools = await client.get_tools()
         agent = create_react_agent(get_llm(), tools)
 
         for action in github_actions:
@@ -98,27 +82,53 @@ async def github_agent_node(state: ConvoOpsState) -> dict:
                 assignees=data.get("assignees", []),
             )
 
-            response = await agent.ainvoke(
-                {"messages": [HumanMessage(content=prompt)]}
-            )
-            last_message = response["messages"][-1].content
+            try:
+                response = await agent.ainvoke(
+                    {"messages": [HumanMessage(content=prompt)]}
+                )
+                last_message = response["messages"][-1].content
+                status = "created"
+            except Exception as exc:
+                # Do not fail the full run if one issue fails (e.g., invalid assignee).
+                last_message = f"Failed to create issue: {exc}"
+                status = "failed"
 
             results.append(
                 {
                     "action_id": action["id"],
                     "action_title": action["title"],
                     "agent": "github_issue",
+                    "status": status,
                     "result": last_message,
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
             )
+
+    except Exception as exc:
+        # MCP startup/transport failures are reported as failed results for all actions.
+        now = datetime.now(timezone.utc).isoformat()
+        for action in github_actions:
+            results.append(
+                {
+                    "action_id": action["id"],
+                    "action_title": action["title"],
+                    "agent": "github_issue",
+                    "status": "failed",
+                    "result": f"GitHub MCP unavailable: {exc}",
+                    "timestamp": now,
+                }
+            )
+
+    created_count = sum(1 for r in results if r.get("status") == "created")
+    failed_count = sum(1 for r in results if r.get("status") == "failed")
 
     return {
         "execution_results": results,
         "audit_trail": [
             {
                 "step": "github_agent",
-                "issues_created": len(results),
+                "issues_created": created_count,
+                "issues_failed": failed_count,
                 "action_ids": [a["id"] for a in github_actions],
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }

@@ -37,7 +37,7 @@ class ConversationClassification(BaseModel):
 
 def classifier_node(state: ConvoOpsState) -> dict:
     llm = get_fast_llm()
-    result: ConversationClassification = llm.with_structured_output(ConversationClassification).invoke(
+    result: ConversationClassification = llm.with_structured_output(ConversationClassification, method="function_calling").invoke(
         [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": USER_PROMPT.format(transcript=state["transcript_text"])},

@@ -15,7 +15,7 @@ def get_llm() -> ChatOpenAI:
 
 @lru_cache(maxsize=1)
 def get_fast_llm() -> ChatOpenAI:
-    """Lighter model — used for simple classification and planning to stay within rate limits."""
+    """Fast-path model for simple nodes; defaults to gpt-4o for demo reliability."""
     return ChatOpenAI(
         model=os.environ.get("OPENAI_FAST_MODEL", "gpt-4o-mini"),
         temperature=0,

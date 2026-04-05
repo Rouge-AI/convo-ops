@@ -39,7 +39,7 @@ class ExtractedIntelligence(BaseModel):
 
 def extractor_node(state: ConvoOpsState) -> dict:
     llm = get_llm()
-    result: ExtractedIntelligence = llm.with_structured_output(ExtractedIntelligence).invoke(
+    result: ExtractedIntelligence = llm.with_structured_output(ExtractedIntelligence, method="function_calling").invoke(
         [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": USER_PROMPT.format(transcript=state["transcript_text"])},
