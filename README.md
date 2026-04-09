@@ -52,7 +52,7 @@ ConvoOps closes that gap:
 
 ## Architecture
 
-
+![ConvoOps Architecture](frontend/public/convo-ops-architecture.png)
 
 ### Graph Details
 
